@@ -7,14 +7,14 @@ const {
 const ContractStorage = require("@beanstalk/contract-storage");
 require("dotenv").config();
 
-const beanstalkEthAbi = require("../abi/BeanstalkEth.json");
-const beanstalkArbAbi = require("../abi/BeanstalkArb.json");
-const fertAbi = require("../abi/Fertilizer.json");
-const erc20Abi = require("../abi/ERC20.json");
+const beanstalkEthAbi = require("./abi/BeanstalkEth.json");
+const beanstalkArbAbi = require("./abi/BeanstalkArb.json");
+const fertAbi = require("./abi/Fertilizer.json");
+const erc20Abi = require("./abi/ERC20.json");
 
-const beanstalkEthStorage = require("../storage/BeanstalkEth.json");
-const beanstalkArbStorage = require("../storage/BeanstalkArb.json");
-const fertStorage = require("../storage/Fertilizer.json");
+const beanstalkEthStorage = require("./storage/BeanstalkEth.json");
+const beanstalkArbStorage = require("./storage/BeanstalkArb.json");
+const fertStorage = require("./storage/Fertilizer.json");
 
 class EVM {
   static _providers = {};

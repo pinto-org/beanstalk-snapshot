@@ -1,0 +1,31 @@
+const fs = require("fs");
+const path = require("path");
+const { formatBigintDecimal } = require("./Formatter");
+
+const getCachedOrCalculate = async (name, calculateFn) => {
+  const cacheDir = path.join(process.cwd(), "cache");
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
+
+  const cacheFile = path.join(cacheDir, `${name}.json`);
+
+  if (fs.existsSync(cacheFile)) {
+    console.log(`Returning cached result for ${name}.`);
+    const data = fs.readFileSync(cacheFile, "utf8");
+    return JSON.parse(data);
+  } else {
+    console.log(`No cached result found for ${name}. Calculating...`);
+    const result = await calculateFn();
+    fs.writeFileSync(
+      cacheFile,
+      JSON.stringify(result, formatBigintDecimal, 2),
+      "utf8"
+    );
+    return result;
+  }
+};
+
+module.exports = {
+  getCachedOrCalculate,
+};
