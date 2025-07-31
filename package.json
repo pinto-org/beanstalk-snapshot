@@ -1,0 +1,16 @@
+{
+  "scripts": {
+    "all": "node src/silo.js && node src/field.js && node src/barn.js",
+    "silo": "node src/silo.js",
+    "field": "node src/field.js",
+    "barn": "node src/barn.js"
+  },
+  "dependencies": {
+    "@beanstalk/contract-storage": "^1.1.2",
+    "alchemy-sdk": "^3.6.2",
+    "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2"
+  }
+}
