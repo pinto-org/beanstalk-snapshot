@@ -52,12 +52,11 @@ const getArbPods = async (arbWallets) => {
   // Get all pods for the given wallets
   const TAG = Concurrent.tag("getArbPods-wallet");
   for (const account of arbWallets) {
-    results[account] = {};
-    await Concurrent.run(TAG, 5, async () => {
+    await Concurrent.run(TAG, 10, async () => {
       const plotIndexes = await bs.s.accts[account].fields[0n].plotIndexes;
       const TAG2 = Concurrent.tag(`getArbPods-plots-${account}`);
       for (const plotIndex of plotIndexes) {
-        await Concurrent.run(TAG2, 10, async () => {
+        await Concurrent.run(TAG2, 5, async () => {
           let podCount = await bs.s.accts[account].fields[0n].plots[plotIndex];
           if (podCount > 0n) {
             // Shift recorded plot indices by the harvestable index
