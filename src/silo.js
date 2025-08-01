@@ -1,3 +1,5 @@
+// L1DepositsMigrated, L1InternalBalancesMigrated
+
 // Assets can be held in the silo, circulating, or internal balances.
 
 // Separate by bean vs lp since we might want to show on the UI the breakdown of the calculation.

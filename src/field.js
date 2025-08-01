@@ -9,27 +9,55 @@ const getArbWallets = async () => {
     beanstalk: { contract: beanstalk },
   } = await EVM.getArbitrum();
 
-  const migratedPlots = await batchEventsQuery(
+  // Get owner/receiver of contracts which migrated plots to arb
+  const migratedFromContracts = await getCachedOrCalculate(
+    "field-migrated-contracts",
+    async () => {
+      const l1PlotsMigrated = await batchEventsQuery(
+        beanstalk,
+        beanstalk.filters.L1PlotsMigrated()
+      );
+
+      // Save both owner/receiver. Owner is relevant in a future step.
+      return l1PlotsMigrated.map((event) => ({
+        ethOwner: event.args.owner,
+        arbReceiver: event.args.receiver,
+      }));
+    }
+  );
+  console.log(`Found ${migratedFromContracts.length} L1PlotsMigrated events.`);
+
+  const autoMigratedPlots = await batchEventsQuery(
     beanstalk,
     beanstalk.filters.MigratedPlot()
   );
-  console.log(`Found ${migratedPlots.length} MigratedPlot events.`);
+  console.log(`Found ${autoMigratedPlots.length} MigratedPlot events.`);
+
   const plotTransfers = await batchEventsQuery(
     beanstalk,
     beanstalk.filters.PlotTransfer()
   );
   console.log(`Found ${plotTransfers.length} PlotTransfer events.`);
+
   const sows = await batchEventsQuery(beanstalk, beanstalk.filters.Sow());
   console.log(`Found ${sows.length} Sow events.`);
 
-  const migratedPlotters = migratedPlots.map((plot) => plot.args.account);
-  const transferrers = plotTransfers.flatMap((transfer) => [
+  const autoMigratedAccts = autoMigratedPlots.map((plot) => plot.args.account);
+  const transferAccts = plotTransfers.flatMap((transfer) => [
     transfer.args.from,
     transfer.args.to,
   ]);
-  const sowers = sows.map((sow) => sow.args.account);
+  const sowAccts = sows.map((sow) => sow.args.account);
 
-  return [...new Set([...migratedPlotters, ...transferrers, ...sowers])];
+  return [
+    ...new Set([
+      ...autoMigratedAccts,
+      ...transferAccts,
+      ...sowAccts,
+      // Arb wallet is the receiver of the L1 migrated plots
+      ...migratedFromContracts.map((l1Plots) => l1Plots.arbReceiver),
+    ]),
+  ];
 };
 
 const getEthWallets = async (evm) => {
@@ -63,11 +91,11 @@ const getArbPods = async (arbWallets) => {
             let adjustedIndex = plotIndex - harvestableIndex;
             if (adjustedIndex < 0n) {
               // This plot had partially harvested; so we remove those harvestable pods from the recorded pod count
-              podCount += adjustedIndex;
-              adjustedIndex = 0n;
               console.log(
                 `Removing ${-adjustedIndex} pods from a harvestable plot.`
               );
+              podCount += adjustedIndex;
+              adjustedIndex = 0n;
             }
             if (podCount > 0n) {
               (results[account] ??= {})[adjustedIndex] = podCount;
@@ -87,13 +115,15 @@ const getArbPods = async (arbWallets) => {
 };
 
 (async () => {
-  const arbWallets = await getCachedOrCalculate("field-arb-wallets", () =>
-    getArbWallets()
+  const arbWallets = await getCachedOrCalculate(
+    "field-arb-wallets",
+    async () => await getArbWallets()
   );
   console.log(`Proceeding with ${arbWallets.length} Arb wallets.`);
 
-  const arbPods = await getCachedOrCalculate("field-arb-pods", () =>
-    getArbPods(arbWallets)
+  const arbPods = await getCachedOrCalculate(
+    "field-arb-pods",
+    async () => await getArbPods(arbWallets)
   );
 
   let totalPods = 0n;
