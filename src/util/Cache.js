@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { formatBigintDecimal } = require("./Formatter");
+const { RESEED_BLOCK_ETH } = require("./Constants");
 
 const getCachedOrCalculate = async (name, calculateFn) => {
   const cacheDir = path.join(process.cwd(), "cache");
@@ -26,6 +27,27 @@ const getCachedOrCalculate = async (name, calculateFn) => {
   }
 };
 
+const getReseedResult = (name, type) => {
+  const data = fs.readFileSync(
+    path.join(process.cwd(), "reseed", `${name}${RESEED_BLOCK_ETH}.json`),
+    "utf8"
+  );
+
+  if (type === "json") {
+    return JSON.parse(data);
+  } else if (type === "csv") {
+    return data
+      .split("\n")
+      .filter((_, idx) => idx > 0)
+      .reduce((acc, next) => {
+        const [key, value] = next.trim().split(",");
+        acc[key] = BigInt(value);
+        return acc;
+      }, {});
+  }
+};
+
 module.exports = {
   getCachedOrCalculate,
+  getReseedResult,
 };
