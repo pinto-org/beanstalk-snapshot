@@ -4,7 +4,7 @@ const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
-const { SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
+const { SNAPSHOT_BLOCK_ARB, RESEED_BLOCK_ETH } = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
 const { formatBigintDecimal } = require("./util/Formatter");
 
@@ -91,7 +91,7 @@ const getArbPods = async (arbWallets) => {
   const harvestableIndex = BigInt(
     await beanstalk.harvestableIndex(0n, { blockTag: SNAPSHOT_BLOCK_ARB })
   );
-  console.log(`Using Harvestable Index: ${harvestableIndex}`);
+  console.log(`(arb) Using Harvestable Index: ${harvestableIndex}`);
 
   const results = {};
 
@@ -126,6 +126,8 @@ const getArbPods = async (arbWallets) => {
               adjustedIndex = 0n;
             }
             if (podCount > 0n) {
+              // In practice this is ok because there is only one harvestable plot,
+              // no need to accumulate pods for multiple uses of the adjusted index.
               (results[account] ??= {})[adjustedIndex] = podCount;
             }
           } else {
@@ -147,11 +149,17 @@ const validateTotalPods = async (totalPodCount) => {
     beanstalk: { contract: beanstalk },
   } = await EVM.getArbitrum();
 
-  const expectedPods = BigInt(
-    await beanstalk.totalUnharvestable(0n, {
-      blockTag: SNAPSHOT_BLOCK_ARB,
-    })
-  );
+  // During the Reseed, two particular accounts with very tiny plots or a large number of plots had those plots removed.
+  // As a result the totalUnharvestable, which is indexed-based, does not present an accurate number of unharvestable pods.
+  // 0x9662c8e686fe84f468a139b10769d65665c344f9 migrated to 0x2d4710a99d8dcbcddf407c672c233c9b1b2f8bfb and is missing 0.000974 pods
+  // 0xb9f14efae1d14b6d06816b6e3a5f6e79c87232fa migrated to 0xc3853c3a8fc9c454f59c9aed2fc6cfa1a41eb20e and is missing 2,386.678739 pods
+  // -> 2386679713n
+  const expectedPods =
+    BigInt(
+      await beanstalk.totalUnharvestable(0n, {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      })
+    ) - 2386679713n;
 
   if (totalPodCount !== expectedPods) {
     console.warn(
@@ -160,18 +168,22 @@ const validateTotalPods = async (totalPodCount) => {
     console.warn(
       `! Deficit: ${Number(expectedPods - totalPodCount) / Math.pow(10, 6)}`
     );
+  } else {
+    console.log(
+      `Identified pods count matched the expected value of ${Number(expectedPods) / Math.pow(10, 6)}`
+    );
   }
 };
 
 const getEthPods = async (ethWallets) => {
   const {
     beanstalk: { contract: beanstalk },
-  } = await EVM.getArbitrum();
+  } = await EVM.getEthereum();
 
   const harvestableIndex = BigInt(
-    await beanstalk.harvestableIndex(0n, { blockTag: SNAPSHOT_BLOCK_ARB })
+    await beanstalk.harvestableIndex({ blockTag: RESEED_BLOCK_ETH })
   );
-  console.log(`Using Harvestable Index: ${harvestableIndex}`);
+  console.log(`(eth) Using Harvestable Index: ${harvestableIndex}`);
 
   const reseedPods = getReseedResult("pods", "json");
 
@@ -184,13 +196,7 @@ const getEthPods = async (ethWallets) => {
       let podCount = BigInt(reseedPods[wallet][plot].amount);
 
       let adjustedIndex = plotIndex - harvestableIndex;
-      if (adjustedIndex < 0n) {
-        // This plot had partially harvested; so we remove those harvestable pods from the recorded pod count
-        console.log(`Removing ${-adjustedIndex} pods from a harvestable plot.`);
-        podCount += adjustedIndex;
-        adjustedIndex = 0n;
-      }
-
+      // In practice there are no unmigrated harvestable plots
       if (podCount > 0n) {
         (results[wallet] ??= {})[adjustedIndex] = podCount;
       }
@@ -215,9 +221,14 @@ const getEthPods = async (ethWallets) => {
 
   let totalArbPods = 0n;
   for (const wallet in arbPods) {
+    let walletTotal = 0n;
     for (const plot in arbPods[wallet]) {
-      totalArbPods += BigInt(arbPods[wallet][plot]);
+      walletTotal += BigInt(arbPods[wallet][plot]);
     }
+    // console.log(
+    //   `(arb) Wallet ${wallet} has ${Number(walletTotal) / Math.pow(10, 6)} pods.`
+    // );
+    totalArbPods += walletTotal;
   }
 
   console.log(
@@ -238,9 +249,14 @@ const getEthPods = async (ethWallets) => {
 
   let totalEthPods = 0n;
   for (const wallet in ethPods) {
+    let walletTotal = 0n;
     for (const plot in ethPods[wallet]) {
-      totalEthPods += BigInt(ethPods[wallet][plot]);
+      walletTotal += BigInt(ethPods[wallet][plot]);
     }
+    // console.log(
+    //   `(eth) Wallet ${wallet} has ${Number(walletTotal) / Math.pow(10, 6)} pods.`
+    // );
+    totalEthPods += walletTotal;
   }
 
   console.log(
@@ -248,6 +264,7 @@ const getEthPods = async (ethWallets) => {
   );
 
   /// ---------- Combined ----------
+  // In practice combining like this is ok because there is no overlap between the wallets in each
   const combinedPods = {
     ...arbPods,
     ...ethPods,
@@ -273,8 +290,3 @@ const getEthPods = async (ethWallets) => {
     JSON.stringify(combinedPods, formatBigintDecimal, 2)
   );
 })();
-
-// Subgraph says theres 23,281,370.682583 unmigrated l1 pods
-// Calculation here is  23,278,984.002870
-// But currently theres a net unaccounted deficit of 2,386.679713 pods. I do not see any account having this amount.
-// Harvestable pods was 2,300
