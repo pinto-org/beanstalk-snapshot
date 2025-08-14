@@ -1,13 +1,14 @@
 const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
-const { getCachedOrCalculate } = require("./util/Cache");
+const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
+const { unmigratedContracts } = require("./util/ContractHolders");
 
 const getArbWallets = async () => {
   const {
     beanstalk: { contract: beanstalk },
-    unripe: { bean, lp },
+    unripe: { bean: urbean, lp: urlp },
   } = await EVM.getArbitrum();
 
   /// --------- Deposited ----------
@@ -96,22 +97,27 @@ const getArbWallets = async () => {
     "silo-arb-wallets-having-circulating",
     async () => {
       const urbeanTransfer = await batchEventsQuery(
-        bean,
-        bean.filters.Transfer()
+        urbean,
+        urbean.filters.Transfer()
       );
       console.log(
         `Found ${urbeanTransfer.length} Unripe Bean Transfer events.`
       );
 
-      const urlpTransfer = await batchEventsQuery(lp, lp.filters.Transfer());
+      const urlpTransfer = await batchEventsQuery(
+        urlp,
+        urlp.filters.Transfer()
+      );
       console.log(`Found ${urlpTransfer.length} Unripe LP Transfer events.`);
 
-      return [
-        ...new Set([
-          ...urbeanTransfer.flatMap((e) => [e.args.from, e.args.to]),
-          ...urlpTransfer.flatMap((e) => [e.args.from, e.args.to]),
-        ]),
-      ];
+      const circulatingWallets = new Set([
+        ...urbeanTransfer.flatMap((e) => [e.args.from, e.args.to]),
+        ...urlpTransfer.flatMap((e) => [e.args.from, e.args.to]),
+      ]);
+      // Dont count the diamond's circulating assets.
+      circulatingWallets.delete(ADDR.ARB.BEANSTALK);
+
+      return [...circulatingWallets];
     }
   );
 
@@ -256,12 +262,14 @@ const getArbUnripe = async (wallets) => {
         totalUrlp += BigInt(internalAmounts[1]);
       }
 
-      results[wallet] = {
-        tokens: {
-          bean: totalUrbean,
-          lp: totalUrlp,
-        },
-      };
+      if (totalUrbean > 0n || totalUrlp > 0n) {
+        results[wallet] = {
+          tokens: {
+            bean: totalUrbean,
+            lp: totalUrlp,
+          },
+        };
+      }
     });
   }
   await Concurrent.allResolved(TAG);
@@ -269,10 +277,165 @@ const getArbUnripe = async (wallets) => {
   return results;
 };
 
+const getEthUnripe = async () => {
+  // Separating these is necessary because the migration of each could occur separately to different receivers.
+  const deposits = await getCachedOrCalculate(
+    "silo-unmigrated-eth-deposits",
+    async () => await getEthUnripeDeposits()
+  );
+  const internalBalances = await getCachedOrCalculate(
+    "silo-unmigrated-eth-internal-balances",
+    async () => await getEthUnripeInternal()
+  );
+
+  // Combine results
+  const results = deposits;
+  for (const wallet in internalBalances) {
+    results[wallet] = {
+      tokens: {
+        bean:
+          (results[wallet]?.tokens.bean ?? 0n) +
+          internalBalances[wallet].tokens.bean,
+        lp:
+          (results[wallet]?.tokens.lp ?? 0n) +
+          internalBalances[wallet].tokens.lp,
+      },
+    };
+  }
+
+  return results;
+};
+
+// Contracts which did not have their Silo deposits migrated to arb, who therefore might have unripe deposits
+const getEthUnripeDeposits = async () => {
+  const migratedFromContracts = await getCachedOrCalculate(
+    "silo-deposits-migrated-contracts",
+    async () => {
+      throw new Error(
+        "This should have been cached by this point in the execution."
+      );
+    }
+  );
+  const ethOwners = new Set(
+    migratedFromContracts.map((l1Deposits) => l1Deposits.ethOwner)
+  );
+  const unmigratedOwners = unmigratedContracts(ethOwners);
+
+  const reseedDeposits = getReseedResult("deposits", "json");
+
+  const results = {};
+
+  const walletsLower = unmigratedOwners.map((wallet) => wallet.toLowerCase());
+  for (const wallet of walletsLower) {
+    for (const token in reseedDeposits.accounts[wallet]?.totals ?? {}) {
+      if (token === ADDR.ETH.UNRIPE_BEAN.toLowerCase()) {
+        results[wallet] = {
+          tokens: {
+            bean: BigInt(reseedDeposits.accounts[wallet].totals[token].amount),
+            lp: results[wallet]?.tokens.lp ?? 0n,
+          },
+        };
+      } else if (token === ADDR.ETH.UNRIPE_LP.toLowerCase()) {
+        results[wallet] = {
+          tokens: {
+            bean: results[wallet]?.tokens.bean ?? 0n,
+            lp: BigInt(reseedDeposits.accounts[wallet].totals[token].amount),
+          },
+        };
+      }
+    }
+  }
+
+  return results;
+};
+
+// Contracts which did not have their internal balances migrated to arb, who therefore might have unripe assets
+const getEthUnripeInternal = async () => {
+  const migratedFromContracts = await getCachedOrCalculate(
+    "silo-internal-balance-migrated-contracts",
+    async () => {
+      throw new Error(
+        "This should have been cached by this point in the execution."
+      );
+    }
+  );
+  const ethOwners = new Set(
+    migratedFromContracts.map((l1Balances) => l1Balances.ethOwner)
+  );
+  const unmigratedOwners = unmigratedContracts(ethOwners);
+
+  const reseedInternalBalances = getReseedResult("internal-balances", "json");
+
+  const results = {};
+
+  for (const wallet of unmigratedOwners) {
+    const walletLower = wallet.toLowerCase();
+    for (const token in reseedInternalBalances.accounts[walletLower] ?? {}) {
+      if (token === ADDR.ETH.UNRIPE_BEAN.toLowerCase()) {
+        results[wallet] = {
+          tokens: {
+            bean: BigInt(
+              reseedInternalBalances.accounts[walletLower][token].total
+            ),
+            lp: results[wallet]?.tokens.lp ?? 0n,
+          },
+        };
+      } else if (token === ADDR.ETH.UNRIPE_LP.toLowerCase()) {
+        results[wallet] = {
+          tokens: {
+            bean: results[wallet]?.tokens.bean ?? 0n,
+            lp: BigInt(
+              reseedInternalBalances.accounts[walletLower][token].total
+            ),
+          },
+        };
+      }
+    }
+  }
+
+  return results;
+};
+
+// Unmigrated eth unripe assets are sitting in contract circulating, so the combined amount is validated against total supply.
+const validateTotalUnripe = async (combinedUnripe) => {
+  const {
+    unripe: { bean: urbean, lp: urlp },
+  } = await EVM.getArbitrum();
+
+  const [urbeanSupply, urlpSupply] = (
+    await Promise.all([
+      urbean.totalSupply({ blockTag: SNAPSHOT_BLOCK_ARB }),
+      urlp.totalSupply({ blockTag: SNAPSHOT_BLOCK_ARB }),
+    ])
+  ).map(BigInt);
+
+  let assignedUrbeanTotal = 0n;
+  let assignedUrlpTotal = 0n;
+  for (const wallet in combinedUnripe) {
+    assignedUrbeanTotal += BigInt(combinedUnripe[wallet].tokens.bean);
+    assignedUrlpTotal += BigInt(combinedUnripe[wallet].tokens.lp);
+  }
+
+  if (
+    assignedUrbeanTotal !== urbeanSupply ||
+    assignedUrlpTotal !== urlpSupply
+  ) {
+    console.warn(`! Unripe token count mismatch`);
+    console.warn(`! Unripe Bean`);
+    console.warn(assignedUrbeanTotal);
+    console.warn(urbeanSupply);
+    console.warn(`! Unripe LP`);
+    console.warn(assignedUrlpTotal);
+    console.warn(urlpSupply);
+  } else {
+    console.log(
+      `Unripe totals are matching the expected values of ${urbeanSupply}, ${urlpSupply}`
+    );
+  }
+};
+
 (async () => {
   /// ---------- Arb ----------
-  // Build 3 separate lists of eth/arb wallets to inspect for deposits vs internal vs circulating. This is necessary
-  // because the contract migrations could occur separately to different receivers.
   const arbWallets = await getCachedOrCalculate(
     "silo-arb-wallets",
     async () => await getArbWallets()
@@ -286,8 +449,30 @@ const getArbUnripe = async (wallets) => {
   console.log(`Proceeding with ${Object.keys(arbUnripe).length} Arb unripe.`);
 
   /// ---------- Eth ----------
+  const ethUnripe = await getCachedOrCalculate(
+    "silo-unmigrated-eth-unripe",
+    async () => await getEthUnripe()
+  );
+  console.log(
+    `Proceeding with ${Object.keys(ethUnripe).length} Unmigrated Eth wallets.`
+  );
 
   /// ---------- Combined ----------
+  const combinedUnripe = arbUnripe;
+  for (const wallet in ethUnripe) {
+    combinedUnripe[wallet] = {
+      tokens: {
+        bean:
+          (combinedUnripe[wallet]?.tokens.bean ?? 0n) +
+          ethUnripe[wallet].tokens.bean,
+        lp:
+          (combinedUnripe[wallet]?.tokens.lp ?? 0n) +
+          ethUnripe[wallet].tokens.lp,
+      },
+    };
+  }
+
+  await validateTotalUnripe(combinedUnripe);
 })();
 
 // Separate by bean vs lp since we might want to show on the UI the breakdown of the calculation.
@@ -308,3 +493,11 @@ const unripeRecapitalizedBdvs = {
     },
   },
 };
+
+// Notes:
+// A couple things weren't done because the totals are matching the expected values already, therefore
+// these are not relevant to verify.
+// - didn't verify no overlap between contract-accoutns and urbean-holders/urlp-holders
+// - didn't verify whether any unripe bean/lp were incorrectly sitting inside the beanstalk diamond.
+//   if this occurred, the correct handling would be to keep a running total and subtract deposits/internal balances
+//   from the diamond's circulating balance

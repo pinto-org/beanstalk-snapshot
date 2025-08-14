@@ -65,8 +65,8 @@ const getArbWallets = async () => {
   ];
 };
 
-// Wallets which did not have their Field assets migrated to arb
-const getEthWallets = async (evm) => {
+// Contracts which did not have their Field assets migrated to arb, who therefore might have pods
+const getEthWallets = async () => {
   const migratedFromContracts = await getCachedOrCalculate(
     "field-migrated-contracts",
     async () => {
@@ -144,37 +144,6 @@ const getArbPods = async (arbWallets) => {
   return results;
 };
 
-const validateTotalPods = async (totalPodCount) => {
-  const {
-    beanstalk: { contract: beanstalk },
-  } = await EVM.getArbitrum();
-
-  // During the Reseed, two particular accounts with very tiny plots or a large number of plots had those plots removed.
-  // As a result the totalUnharvestable, which is indexed-based, does not present an accurate number of unharvestable pods.
-  // 0x9662c8e686fe84f468a139b10769d65665c344f9 migrated to 0x2d4710a99d8dcbcddf407c672c233c9b1b2f8bfb and is missing 0.000974 pods
-  // 0xb9f14efae1d14b6d06816b6e3a5f6e79c87232fa migrated to 0xc3853c3a8fc9c454f59c9aed2fc6cfa1a41eb20e and is missing 2,386.678739 pods
-  // -> 2386679713n
-  const expectedPods =
-    BigInt(
-      await beanstalk.totalUnharvestable(0n, {
-        blockTag: SNAPSHOT_BLOCK_ARB,
-      })
-    ) - 2386679713n;
-
-  if (totalPodCount !== expectedPods) {
-    console.warn(
-      `! Found ${totalPodCount} Pods, but there are actually ${expectedPods}`
-    );
-    console.warn(
-      `! Deficit: ${Number(expectedPods - totalPodCount) / Math.pow(10, 6)}`
-    );
-  } else {
-    console.log(
-      `Identified pods count matched the expected value of ${Number(expectedPods) / Math.pow(10, 6)}`
-    );
-  }
-};
-
 const getEthPods = async (ethWallets) => {
   const {
     beanstalk: { contract: beanstalk },
@@ -204,6 +173,37 @@ const getEthPods = async (ethWallets) => {
   }
 
   return results;
+};
+
+const validateTotalPods = async (totalPodCount) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  // During the Reseed, two particular accounts with very tiny plots or a large number of plots had those plots removed.
+  // As a result the totalUnharvestable, which is indexed-based, does not present an accurate number of unharvestable pods.
+  // 0x9662c8e686fe84f468a139b10769d65665c344f9 migrated to 0x2d4710a99d8dcbcddf407c672c233c9b1b2f8bfb and is missing 0.000974 pods
+  // 0xb9f14efae1d14b6d06816b6e3a5f6e79c87232fa migrated to 0xc3853c3a8fc9c454f59c9aed2fc6cfa1a41eb20e and is missing 2,386.678739 pods
+  // -> 2386679713n
+  const expectedPods =
+    BigInt(
+      await beanstalk.totalUnharvestable(0n, {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      })
+    ) - 2386679713n;
+
+  if (totalPodCount !== expectedPods) {
+    console.warn(
+      `! Found ${totalPodCount} Pods, but there are actually ${expectedPods}`
+    );
+    console.warn(
+      `! Deficit: ${Number(expectedPods - totalPodCount) / Math.pow(10, 6)}`
+    );
+  } else {
+    console.log(
+      `Identified pods count matched the expected value of ${Number(expectedPods) / Math.pow(10, 6)}`
+    );
+  }
 };
 
 (async () => {

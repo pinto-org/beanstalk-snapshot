@@ -11471,7 +11471,7 @@
   },
   "0xD1A0060ba708BC4BCD3DA6C37EFa8deDF015FB70": {
     "deposits": false,
-    "circulating": true,
+    "circulating": false,
     "internal": false
   },
   "0x253ab8294bf3FB6AB6439abC9Bc7081504DB9bff": {
