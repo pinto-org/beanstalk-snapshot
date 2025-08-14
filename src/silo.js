@@ -76,7 +76,10 @@ const getArbWallets = async () => {
           ...addDeposit.map((e) => e.args.account),
           ...removeDeposit.map((e) => e.args.account),
           ...removeDeposits.map((e) => e.args.account),
-          ...transferSingle.flatMap((e) => [e.args.sender, e.args.recipient]),
+          ...transferSingle.flatMap((e) => [
+            e.args.sender ?? e.args.from ?? e.args._from,
+            e.args.recipient ?? e.args.to ?? e.args._to,
+          ]),
           ...transferBatch.flatMap((e) => [e.args.from, e.args.to]),
           // Arb wallet is the receiver of the L1 migrated deposits
           ...contractsMigratedDeposits.map((deposit) => deposit.arbReceiver),
