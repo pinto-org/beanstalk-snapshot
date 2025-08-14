@@ -1,9 +1,13 @@
+const fs = require("fs");
+const path = require("path");
 const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
+const { formatBigintDecimal } = require("./util/Formatter");
+const { fromBigInt, toBigInt } = require("./util/NumberUtil");
 
 const getArbWallets = async () => {
   const {
@@ -396,6 +400,58 @@ const getEthUnripeInternal = async () => {
   return results;
 };
 
+// Assign bdv of these amounts at snapshot/recapitalization
+const assignBdvs = async (combinedUnripe) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  const [bdvUrbean, bdvUrlp, recapPctUrbean, recapPctUrlp] = (
+    await Promise.all([
+      beanstalk.bdv(ADDR.ARB.UNRIPE_BEAN, BigInt(10 ** 6), {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      }),
+      beanstalk.bdv(ADDR.ARB.UNRIPE_LP, BigInt(10 ** 6), {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      }),
+      beanstalk.getRecapFundedPercent(ADDR.ARB.UNRIPE_BEAN, {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      }),
+      beanstalk.getRecapFundedPercent(ADDR.ARB.UNRIPE_LP, {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      }),
+    ])
+  ).map((x) => Number(x) / 10 ** 6);
+
+  console.log(`BDV at snapshot: ${bdvUrbean}, ${bdvUrlp}`);
+  console.log(
+    `Recap funded percent at snapshot: ${recapPctUrbean}, ${recapPctUrlp}`
+  );
+
+  const bdvUrbeanAtRecap = bdvUrbean * (1 / recapPctUrbean);
+  const bdvUrlpAtRecap = bdvUrlp * (1 / recapPctUrlp);
+
+  for (const wallet in combinedUnripe) {
+    const { bean: beanAmount, lp: lpAmount } = combinedUnripe[wallet].tokens;
+    combinedUnripe[wallet] = {
+      bdvAtSnapshot: {
+        bean: toBigInt(fromBigInt(BigInt(beanAmount, 6)) * bdvUrbean, 6),
+        lp: toBigInt(fromBigInt(BigInt(lpAmount, 6)) * bdvUrlp, 6),
+      },
+      bdvAtRecapitalization: {
+        bean: toBigInt(fromBigInt(BigInt(beanAmount, 6)) * bdvUrbeanAtRecap, 6),
+        lp: toBigInt(fromBigInt(BigInt(lpAmount, 6)) * bdvUrlpAtRecap, 6),
+      },
+    };
+    combinedUnripe[wallet].bdvAtSnapshot.total =
+      combinedUnripe[wallet].bdvAtSnapshot.bean +
+      combinedUnripe[wallet].bdvAtSnapshot.lp;
+    combinedUnripe[wallet].bdvAtRecapitalization.total =
+      combinedUnripe[wallet].bdvAtRecapitalization.bean +
+      combinedUnripe[wallet].bdvAtRecapitalization.lp;
+  }
+};
+
 // Unmigrated eth unripe assets are sitting in contract circulating, so the combined amount is validated against total supply.
 const validateTotalUnripe = async (combinedUnripe) => {
   const {
@@ -473,6 +529,15 @@ const validateTotalUnripe = async (combinedUnripe) => {
   }
 
   await validateTotalUnripe(combinedUnripe);
+
+  await assignBdvs(combinedUnripe);
+
+  // Final output
+  const outPath = path.join(process.cwd(), "output", "silo.json");
+  fs.writeFileSync(
+    outPath,
+    JSON.stringify(combinedUnripe, formatBigintDecimal, 2)
+  );
 })();
 
 // Separate by bean vs lp since we might want to show on the UI the breakdown of the calculation.
@@ -485,6 +550,7 @@ const unripeRecapitalizedBdvs = {
     bdvAtSnapshot: {
       bean: "0x123",
       lp: "0x12",
+      total: "0xabcd",
     },
     bdvAtRecapitalization: {
       bean: "0x123",

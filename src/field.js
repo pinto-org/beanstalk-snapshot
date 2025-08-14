@@ -158,11 +158,11 @@ const getEthPods = async (ethWallets) => {
 
   results = {};
 
-  const walletsLower = ethWallets.map((wallet) => wallet.toLowerCase());
-  for (const wallet of walletsLower) {
-    for (const plot in reseedPods[wallet]) {
+  for (const wallet of ethWallets) {
+    const walletLower = wallet.toLowerCase();
+    for (const plot in reseedPods[walletLower]) {
       let plotIndex = BigInt(plot);
-      let podCount = BigInt(reseedPods[wallet][plot].amount);
+      let podCount = BigInt(reseedPods[walletLower][plot].amount);
 
       let adjustedIndex = plotIndex - harvestableIndex;
       // In practice there are no unmigrated harvestable plots
