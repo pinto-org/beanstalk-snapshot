@@ -1,6 +1,8 @@
 const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const { getCachedOrCalculate } = require("./util/Cache");
+const Concurrent = require("./util/Concurrent");
+const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 
 const getArbWallets = async () => {
   const {
@@ -195,9 +197,77 @@ const getArbWallets = async () => {
 };
 
 // Assets can be held in the silo, circulating, or internal balances.
-// getTokenDepositsForAccount(account, tokens) -> returns info of all deposits for the account
-// getInternalBalance(account, token)
-// getExternalBalance(account, token)
+const getArbUnripe = async (wallets) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  const results = {};
+
+  const TAG = Concurrent.tag("getArbUnripe");
+  for (const wallet in wallets) {
+    await Concurrent.run(TAG, 15, async () => {
+      // Check each balance type that a wallet might have
+      const { deposits, circulating, internal } = wallets[wallet];
+      const [depositAmounts, circulatingAmounts, internalAmounts] =
+        await Promise.all([
+          deposits
+            ? beanstalk.getDepositsForAccount(
+                wallet,
+                [ADDR.ARB.UNRIPE_BEAN, ADDR.ARB.UNRIPE_LP],
+                { blockTag: SNAPSHOT_BLOCK_ARB }
+              )
+            : Promise.resolve(null),
+          circulating
+            ? beanstalk.getExternalBalances(
+                wallet,
+                [ADDR.ARB.UNRIPE_BEAN, ADDR.ARB.UNRIPE_LP],
+                { blockTag: SNAPSHOT_BLOCK_ARB }
+              )
+            : Promise.resolve(null),
+          internal
+            ? beanstalk.getInternalBalances(
+                wallet,
+                [ADDR.ARB.UNRIPE_BEAN, ADDR.ARB.UNRIPE_LP],
+                { blockTag: SNAPSHOT_BLOCK_ARB }
+              )
+            : Promise.resolve(null),
+        ]);
+
+      // Aggregate results across 3 sources
+      let totalUrbean = 0n;
+      let totalUrlp = 0n;
+      if (depositAmounts) {
+        totalUrbean += depositAmounts[0].tokenDeposits.reduce(
+          (acc, next) => acc + BigInt(next.amount),
+          0n
+        );
+        totalUrlp += depositAmounts[1].tokenDeposits.reduce(
+          (acc, next) => acc + BigInt(next.amount),
+          0n
+        );
+      }
+      if (circulatingAmounts) {
+        totalUrbean += BigInt(circulatingAmounts[0]);
+        totalUrlp += BigInt(circulatingAmounts[1]);
+      }
+      if (internalAmounts) {
+        totalUrbean += BigInt(internalAmounts[0]);
+        totalUrlp += BigInt(internalAmounts[1]);
+      }
+
+      results[wallet] = {
+        tokens: {
+          bean: totalUrbean,
+          lp: totalUrlp,
+        },
+      };
+    });
+  }
+  await Concurrent.allResolved(TAG);
+
+  return results;
+};
 
 (async () => {
   /// ---------- Arb ----------
@@ -208,6 +278,12 @@ const getArbWallets = async () => {
     async () => await getArbWallets()
   );
   console.log(`Proceeding with ${Object.keys(arbWallets).length} Arb wallets.`);
+
+  const arbUnripe = await getCachedOrCalculate(
+    "silo-arb-unripe",
+    async () => await getArbUnripe(arbWallets)
+  );
+  console.log(`Proceeding with ${Object.keys(arbUnripe).length} Arb unripe.`);
 
   /// ---------- Eth ----------
 
