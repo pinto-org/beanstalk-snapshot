@@ -433,16 +433,15 @@ const assignBdvs = async (combinedUnripe) => {
 
   for (const wallet in combinedUnripe) {
     const { bean: beanAmount, lp: lpAmount } = combinedUnripe[wallet].tokens;
-    combinedUnripe[wallet] = {
-      bdvAtSnapshot: {
-        bean: toBigInt(fromBigInt(BigInt(beanAmount, 6)) * bdvUrbean, 6),
-        lp: toBigInt(fromBigInt(BigInt(lpAmount, 6)) * bdvUrlp, 6),
-      },
-      bdvAtRecapitalization: {
-        bean: toBigInt(fromBigInt(BigInt(beanAmount, 6)) * bdvUrbeanAtRecap, 6),
-        lp: toBigInt(fromBigInt(BigInt(lpAmount, 6)) * bdvUrlpAtRecap, 6),
-      },
+    combinedUnripe[wallet].bdvAtSnapshot = {
+      bean: toBigInt(fromBigInt(BigInt(beanAmount), 6) * bdvUrbean, 6),
+      lp: toBigInt(fromBigInt(BigInt(lpAmount), 6) * bdvUrlp, 6),
     };
+    combinedUnripe[wallet].bdvAtRecapitalization = {
+      bean: toBigInt(fromBigInt(BigInt(beanAmount), 6) * bdvUrbeanAtRecap, 6),
+      lp: toBigInt(fromBigInt(BigInt(lpAmount), 6) * bdvUrlpAtRecap, 6),
+    };
+
     combinedUnripe[wallet].bdvAtSnapshot.total =
       combinedUnripe[wallet].bdvAtSnapshot.bean +
       combinedUnripe[wallet].bdvAtSnapshot.lp;
