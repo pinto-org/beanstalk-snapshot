@@ -3,7 +3,7 @@
 
 # Beanstalk Snapshot
 
-Calculates asset distribution among Beanstalk holders at the Pinto deployment block. Read more about Beanstalk holders here: https://mirror.xyz/0x8F02813a0AC20affC2C7568e0CB9a7cE5288Ab27/2Ubk-rMAVxv1g3jLBq9ur_01_iq5lR6CN8zvcyHUwLM
+Calculates asset distribution among Beanstalk holders at the Pinto deployment block. Read more about Beanstalk holders [here](https://mirror.xyz/0x8F02813a0AC20affC2C7568e0CB9a7cE5288Ab27/2Ubk-rMAVxv1g3jLBq9ur_01_iq5lR6CN8zvcyHUwLM).
 
 ## How to Use
 
