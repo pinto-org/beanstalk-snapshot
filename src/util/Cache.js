@@ -47,7 +47,7 @@ const getAndExtendIsContractMapping = async (network, addresses, block) => {
 
   const TAG = Concurrent.tag("isContractMapping");
   for (const address of addresses) {
-    if (!retval[address]) {
+    if (retval[address] === undefined) {
       await Concurrent.run(TAG, 50, async () => {
         retval[address] = await EVM.isContract(network, address, block);
       });

@@ -184,37 +184,6 @@ const getEthPods = async (ethWallets) => {
   return results;
 };
 
-const validateTotalPods = async (totalPodCount) => {
-  const {
-    beanstalk: { contract: beanstalk },
-  } = await EVM.getArbitrum();
-
-  // During the Reseed, two particular accounts with very tiny plots or a large number of plots had those plots removed.
-  // As a result the totalUnharvestable, which is indexed-based, does not present an accurate number of unharvestable pods.
-  // 0x9662c8e686fe84f468a139b10769d65665c344f9 migrated to 0x2d4710a99d8dcbcddf407c672c233c9b1b2f8bfb and is missing 0.000974 pods
-  // 0xb9f14efae1d14b6d06816b6e3a5f6e79c87232fa migrated to 0xc3853c3a8fc9c454f59c9aed2fc6cfa1a41eb20e and is missing 2,386.678739 pods
-  // -> 2386679713n
-  const expectedPods =
-    BigInt(
-      await beanstalk.totalUnharvestable(0n, {
-        blockTag: SNAPSHOT_BLOCK_ARB,
-      })
-    ) - 2386679713n;
-
-  if (totalPodCount !== expectedPods) {
-    console.warn(
-      `! Found ${totalPodCount} Pods, but there are actually ${expectedPods}`
-    );
-    console.warn(
-      `! Deficit: ${Number(expectedPods - totalPodCount) / Math.pow(10, 6)}`
-    );
-  } else {
-    console.log(
-      `Identified pods count matched the expected value of ${Number(expectedPods) / Math.pow(10, 6)}`
-    );
-  }
-};
-
 const resultByWalletType = async (combinedResult, arbWallets) => {
   const arbIsContractMapping = await getAndExtendIsContractMapping(
     Network.ARB_MAINNET,
@@ -241,6 +210,49 @@ const resultByWalletType = async (combinedResult, arbWallets) => {
   }
 
   return retval;
+};
+
+const validateTotalPods = async (finalResult) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  let assignedPodsTotal = 0n;
+  const sumSection = (section) => {
+    for (const wallet in section) {
+      for (const plot in section[wallet]) {
+        assignedPodsTotal += BigInt(section[wallet][plot]);
+      }
+    }
+  };
+  sumSection(finalResult.arbEOAs);
+  sumSection(finalResult.arbContracts);
+  sumSection(finalResult.ethContracts);
+
+  // During the Reseed, two particular accounts with very tiny plots or a large number of plots had those plots removed.
+  // As a result the totalUnharvestable, which is indexed-based, does not present an accurate number of unharvestable pods.
+  // 0x9662c8e686fe84f468a139b10769d65665c344f9 migrated to 0x2d4710a99d8dcbcddf407c672c233c9b1b2f8bfb and is missing 0.000974 pods
+  // 0xb9f14efae1d14b6d06816b6e3a5f6e79c87232fa migrated to 0xc3853c3a8fc9c454f59c9aed2fc6cfa1a41eb20e and is missing 2,386.678739 pods
+  // -> 2386679713n
+  const expectedPods =
+    BigInt(
+      await beanstalk.totalUnharvestable(0n, {
+        blockTag: SNAPSHOT_BLOCK_ARB,
+      })
+    ) - 2386679713n;
+
+  if (assignedPodsTotal !== expectedPods) {
+    console.warn(
+      `! Found ${assignedPodsTotal} Pods, but there are actually ${expectedPods}`
+    );
+    console.warn(
+      `! Deficit: ${Number(expectedPods - assignedPodsTotal) / Math.pow(10, 6)}`
+    );
+  } else {
+    console.log(
+      `Identified pods count matched the expected value of ${Number(expectedPods) / Math.pow(10, 6)}`
+    );
+  }
 };
 
 (async () => {
@@ -307,23 +319,12 @@ const resultByWalletType = async (combinedResult, arbWallets) => {
     ...ethPods,
   };
 
-  let totalCombinedPods = 0n;
-  for (const wallet in combinedPods) {
-    for (const plot in combinedPods[wallet]) {
-      totalCombinedPods += BigInt(combinedPods[wallet][plot]);
-    }
-  }
-
-  console.log(
-    `Found ${Number(totalCombinedPods) / Math.pow(10, 6)} Combined Pods across ${Object.keys(combinedPods).length} wallets.`
-  );
-
-  await validateTotalPods(totalCombinedPods);
-
   const finalResult = await resultByWalletType(
     combinedPods,
     new Set(Object.keys(arbPods))
   );
+
+  await validateTotalPods(finalResult);
 
   writeOutput("field", finalResult);
 })();

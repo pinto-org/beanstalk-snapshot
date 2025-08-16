@@ -148,37 +148,8 @@ const getEthFert = async () => {
   return retval;
 };
 
-const validateTotalFert = async (combinedFert) => {
-  const {
-    beanstalk: { contract: beanstalk },
-  } = await EVM.getArbitrum();
-
-  // Unmigrated fert is still included in this total
-  const activeFert = BigInt(
-    await beanstalk.getActiveFertilizer({ blockTag: SNAPSHOT_BLOCK_ARB })
-  );
-
-  let assignedFertTotal = 0n;
-  for (const wallet in combinedFert) {
-    for (const fertId in combinedFert[wallet].beanFert) {
-      assignedFertTotal += BigInt(combinedFert[wallet].beanFert[fertId]);
-    }
-  }
-
-  if (assignedFertTotal !== activeFert) {
-    console.warn(
-      `! Found ${assignedFertTotal} Fert, but there are actually ${activeFert}`
-    );
-    console.warn(`! Deficit: ${activeFert - assignedFertTotal}`);
-  } else {
-    console.log(
-      `Fert count matched the expected value of ${Number(activeFert)}`
-    );
-  }
-};
-
 // BPF adjustments
-const applyMetadata = async (combinedFert) => {
+const applyMetadata = async (finalResult) => {
   const {
     beanstalk: { contract: beanstalk },
   } = await EVM.getArbitrum();
@@ -190,7 +161,7 @@ const applyMetadata = async (combinedFert) => {
   const retval = {
     beanBpf,
     adjustedBpf: 0n,
-    accounts: combinedFert,
+    accounts: finalResult,
   };
 
   for (const wallet in retval.accounts) {
@@ -202,58 +173,6 @@ const applyMetadata = async (combinedFert) => {
   }
 
   return retval;
-};
-
-// Validate sprouts against both actual/adjusted values
-const validateTotalSprouts = async (finalResult) => {
-  const {
-    beanstalk: { contract: beanstalk },
-  } = await EVM.getArbitrum();
-
-  const unfertilizedBeans = BigInt(
-    await beanstalk.totalUnfertilizedBeans({ blockTag: SNAPSHOT_BLOCK_ARB })
-  );
-
-  let assignedUnfertilized = 0n;
-  let assignedUnfertilizedAdjusted = 0n;
-  for (const wallet in finalResult.accounts) {
-    for (const fertId in finalResult.accounts[wallet].beanFert) {
-      const remainingPerFert = BigInt(fertId) - finalResult.beanBpf;
-      assignedUnfertilized +=
-        BigInt(finalResult.accounts[wallet].beanFert[fertId]) *
-        remainingPerFert;
-    }
-    for (const fertId in finalResult.accounts[wallet].adjustedFert) {
-      const remainingPerFert = BigInt(fertId) - finalResult.adjustedBpf;
-      assignedUnfertilizedAdjusted +=
-        BigInt(finalResult.accounts[wallet].adjustedFert[fertId]) *
-        remainingPerFert;
-    }
-  }
-
-  if (assignedUnfertilized !== unfertilizedBeans) {
-    console.warn(
-      `! Found ${assignedUnfertilized} Unfertilized Beans, but there are actually ${unfertilizedBeans}`
-    );
-    console.warn(`! Deficit: ${unfertilizedBeans - assignedUnfertilized}`);
-  } else {
-    console.log(
-      `Unfertilized beans count matched the expected value of ${Number(unfertilizedBeans)}`
-    );
-  }
-
-  if (assignedUnfertilizedAdjusted !== unfertilizedBeans) {
-    console.warn(
-      `! Found ${assignedUnfertilizedAdjusted} Unfertilized Beans (adjusted), but there are actually ${unfertilizedBeans}`
-    );
-    console.warn(
-      `! Deficit: ${unfertilizedBeans - assignedUnfertilizedAdjusted}`
-    );
-  } else {
-    console.log(
-      `Adjusted unfertilized beans count matched the expected value of ${Number(unfertilizedBeans)}`
-    );
-  }
 };
 
 const resultByWalletType = async (combinedResult, arbWallets) => {
@@ -286,6 +205,95 @@ const resultByWalletType = async (combinedResult, arbWallets) => {
   return retval;
 };
 
+const validateTotalFert = async (finalResult) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  // Unmigrated fert is still included in this total
+  const activeFert = BigInt(
+    await beanstalk.getActiveFertilizer({ blockTag: SNAPSHOT_BLOCK_ARB })
+  );
+
+  let assignedFertTotal = 0n;
+  const sumSection = (section) => {
+    for (const wallet in section) {
+      for (const fertId in section[wallet].beanFert) {
+        assignedFertTotal += BigInt(section[wallet].beanFert[fertId]);
+      }
+    }
+  };
+  sumSection(finalResult.arbEOAs);
+  sumSection(finalResult.arbContracts);
+  sumSection(finalResult.ethContracts);
+
+  if (assignedFertTotal !== activeFert) {
+    console.warn(
+      `! Found ${assignedFertTotal} Fert, but there are actually ${activeFert}`
+    );
+    console.warn(`! Deficit: ${activeFert - assignedFertTotal}`);
+  } else {
+    console.log(
+      `Fert count matched the expected value of ${Number(activeFert)}`
+    );
+  }
+};
+
+// Validate sprouts against both actual/adjusted values
+const validateTotalSprouts = async (finalResult) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  const unfertilizedBeans = BigInt(
+    await beanstalk.totalUnfertilizedBeans({ blockTag: SNAPSHOT_BLOCK_ARB })
+  );
+
+  let assignedUnfertilized = 0n;
+  let assignedUnfertilizedAdjusted = 0n;
+  const sumSection = (section) => {
+    for (const wallet in section) {
+      for (const fertId in section[wallet].beanFert) {
+        const remainingPerFert = BigInt(fertId) - finalResult.beanBpf;
+        assignedUnfertilized +=
+          BigInt(section[wallet].beanFert[fertId]) * remainingPerFert;
+      }
+      for (const fertId in section[wallet].adjustedFert) {
+        const remainingPerFert = BigInt(fertId) - finalResult.adjustedBpf;
+        assignedUnfertilizedAdjusted +=
+          BigInt(section[wallet].adjustedFert[fertId]) * remainingPerFert;
+      }
+    }
+  };
+  sumSection(finalResult.arbEOAs);
+  sumSection(finalResult.arbContracts);
+  sumSection(finalResult.ethContracts);
+
+  if (assignedUnfertilized !== unfertilizedBeans) {
+    console.warn(
+      `! Found ${assignedUnfertilized} Unfertilized Beans, but there are actually ${unfertilizedBeans}`
+    );
+    console.warn(`! Deficit: ${unfertilizedBeans - assignedUnfertilized}`);
+  } else {
+    console.log(
+      `Unfertilized beans count matched the expected value of ${Number(unfertilizedBeans)}`
+    );
+  }
+
+  if (assignedUnfertilizedAdjusted !== unfertilizedBeans) {
+    console.warn(
+      `! Found ${assignedUnfertilizedAdjusted} Unfertilized Beans (adjusted), but there are actually ${unfertilizedBeans}`
+    );
+    console.warn(
+      `! Deficit: ${unfertilizedBeans - assignedUnfertilizedAdjusted}`
+    );
+  } else {
+    console.log(
+      `Adjusted unfertilized beans count matched the expected value of ${Number(unfertilizedBeans)}`
+    );
+  }
+};
+
 (async () => {
   /// ---------- Arb ----------
   const arbWallets = await getCachedOrCalculate(
@@ -313,15 +321,15 @@ const resultByWalletType = async (combinedResult, arbWallets) => {
   /// ---------- Combined ----------
   throwIfStringOverlap(Object.keys(arbFert), Object.keys(ethFert));
   const combinedFert = { ...arbFert, ...ethFert };
-
-  await validateTotalFert(combinedFert);
   const combinedResult = await applyMetadata(combinedFert);
-  await validateTotalSprouts(combinedResult);
 
   const finalResult = await resultByWalletType(
     combinedResult,
     new Set(Object.keys(arbFert))
   );
+
+  await validateTotalFert(finalResult);
+  await validateTotalSprouts(finalResult);
 
   writeOutput("barn", finalResult);
 })();

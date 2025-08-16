@@ -457,44 +457,6 @@ const assignBdvs = async (combinedUnripe) => {
   }
 };
 
-// Unmigrated eth unripe assets are sitting in contract circulating, so the combined amount is validated against total supply.
-const validateTotalUnripe = async (combinedUnripe) => {
-  const {
-    unripe: { bean: urbean, lp: urlp },
-  } = await EVM.getArbitrum();
-
-  const [urbeanSupply, urlpSupply] = (
-    await Promise.all([
-      urbean.totalSupply({ blockTag: SNAPSHOT_BLOCK_ARB }),
-      urlp.totalSupply({ blockTag: SNAPSHOT_BLOCK_ARB }),
-    ])
-  ).map(BigInt);
-
-  let assignedUrbeanTotal = 0n;
-  let assignedUrlpTotal = 0n;
-  for (const wallet in combinedUnripe) {
-    assignedUrbeanTotal += BigInt(combinedUnripe[wallet].tokens.bean);
-    assignedUrlpTotal += BigInt(combinedUnripe[wallet].tokens.lp);
-  }
-
-  if (
-    assignedUrbeanTotal !== urbeanSupply ||
-    assignedUrlpTotal !== urlpSupply
-  ) {
-    console.warn(`! Unripe token count mismatch`);
-    console.warn(`! Unripe Bean`);
-    console.warn(assignedUrbeanTotal);
-    console.warn(urbeanSupply);
-    console.warn(`! Unripe LP`);
-    console.warn(assignedUrlpTotal);
-    console.warn(urlpSupply);
-  } else {
-    console.log(
-      `Unripe totals are matching the expected values of ${urbeanSupply}, ${urlpSupply}`
-    );
-  }
-};
-
 const resultByWalletType = async (combinedResult, arbWallets) => {
   const arbIsContractMapping = await getAndExtendIsContractMapping(
     Network.ARB_MAINNET,
@@ -523,6 +485,49 @@ const resultByWalletType = async (combinedResult, arbWallets) => {
   return retval;
 };
 
+// Unmigrated eth unripe assets are sitting in contract circulating, so the combined amount is validated against total supply.
+const validateTotalUnripe = async (finalResult) => {
+  const {
+    unripe: { bean: urbean, lp: urlp },
+  } = await EVM.getArbitrum();
+
+  const [urbeanSupply, urlpSupply] = (
+    await Promise.all([
+      urbean.totalSupply({ blockTag: SNAPSHOT_BLOCK_ARB }),
+      urlp.totalSupply({ blockTag: SNAPSHOT_BLOCK_ARB }),
+    ])
+  ).map(BigInt);
+
+  let assignedUrbeanTotal = 0n;
+  let assignedUrlpTotal = 0n;
+  const sumSection = (section) => {
+    for (const wallet in section) {
+      assignedUrbeanTotal += BigInt(section[wallet].tokens.bean);
+      assignedUrlpTotal += BigInt(section[wallet].tokens.lp);
+    }
+  };
+  sumSection(finalResult.arbEOAs);
+  sumSection(finalResult.arbContracts);
+  sumSection(finalResult.ethContracts);
+
+  if (
+    assignedUrbeanTotal !== urbeanSupply ||
+    assignedUrlpTotal !== urlpSupply
+  ) {
+    console.warn(`! Unripe token count mismatch`);
+    console.warn(`! Unripe Bean`);
+    console.warn(assignedUrbeanTotal);
+    console.warn(urbeanSupply);
+    console.warn(`! Unripe LP`);
+    console.warn(assignedUrlpTotal);
+    console.warn(urlpSupply);
+  } else {
+    console.log(
+      `Unripe totals are matching the expected values of ${urbeanSupply}, ${urlpSupply}`
+    );
+  }
+};
+
 (async () => {
   /// ---------- Arb ----------
   const arbWallets = await getCachedOrCalculate(
@@ -549,13 +554,14 @@ const resultByWalletType = async (combinedResult, arbWallets) => {
   /// ---------- Combined ----------
   throwIfStringOverlap(Object.keys(arbUnripe), Object.keys(ethUnripe));
   const combinedUnripe = { ...arbUnripe, ...ethUnripe };
-  await validateTotalUnripe(combinedUnripe);
   await assignBdvs(combinedUnripe);
 
   const finalResult = await resultByWalletType(
     combinedUnripe,
     new Set(Object.keys(arbUnripe))
   );
+
+  await validateTotalUnripe(finalResult);
 
   writeOutput("silo", finalResult);
 })();
