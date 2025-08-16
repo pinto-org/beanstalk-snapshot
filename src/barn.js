@@ -1,15 +1,10 @@
-// FertilizerMigrated(account, fid), L1FertilizerMigrated(owner, receiver , fertIds)
-// TransferSingle(from, to, id), TransferBatch(from, to, ids)
-
-const fs = require("fs");
-const path = require("path");
 const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const EVM = require("./data/EVM");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 const Concurrent = require("./util/Concurrent");
 const { unmigratedContracts } = require("./util/ContractHolders");
-const { formatBigintDecimal } = require("./util/Formatter");
+const { writeOutput } = require("./util/Output");
 
 // Wallets that might have fert by id on arb
 const getArbWallets = async () => {
@@ -295,37 +290,5 @@ const validateTotalSprouts = async (finalResult) => {
   const finalResult = await applyMetadata(combinedFert);
   await validateTotalSprouts(finalResult);
 
-  // Final output
-  const outPath = path.join(process.cwd(), "output", "barn.json");
-  fs.writeFileSync(
-    outPath,
-    JSON.stringify(finalResult, formatBigintDecimal, 2)
-  );
+  writeOutput("barn", finalResult);
 })();
-
-// Number of sprouts/humidity etc is irrelevant since it can be derived from the bpf/id/amount.
-// I'm thinking i would like to reset the bpf to zero and decrement all the Fert IDs by that same amount.
-// (its irrelevant to pinto how much beans have already paid back).
-// I will still report the beanstalk values so you can choose/or so we could display the initial positions on the UI
-const fertilizer = {
-  beanBpf: "0x123456",
-  adjustedBpf: "0x0",
-  accounts: {
-    "0xAccount": {
-      beanFert: {
-        "0xBeanstalk Fert ID": "0xFert Amount",
-        "0x12345": "0x236",
-      },
-      adjustedFert: {
-        "0xAdjusted Fert ID": "0xFert Amount",
-        "0x123": "0x236",
-      },
-    },
-  },
-};
-
-// Put this somewhere else for overall project init?
-// const outputDir = path.join(__dirname, "../", "output");
-// if (!fs.existsSync(outputDir)) {
-//   fs.mkdirSync(outputDir, { recursive: true });
-// }

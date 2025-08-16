@@ -1,5 +1,3 @@
-const fs = require("fs");
-const path = require("path");
 const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
@@ -10,7 +8,7 @@ const {
   ADDR,
 } = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
-const { formatBigintDecimal } = require("./util/Formatter");
+const { writeOutput } = require("./util/Output");
 
 // Wallets with Field assets on arb
 const getArbWallets = async () => {
@@ -288,10 +286,5 @@ const validateTotalPods = async (totalPodCount) => {
 
   await validateTotalPods(totalCombinedPods);
 
-  // Final output
-  const outPath = path.join(process.cwd(), "output", "field.json");
-  fs.writeFileSync(
-    outPath,
-    JSON.stringify(combinedPods, formatBigintDecimal, 2)
-  );
+  writeOutput("field", combinedPods);
 })();

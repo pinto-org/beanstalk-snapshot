@@ -1,13 +1,11 @@
-const fs = require("fs");
-const path = require("path");
 const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
-const { formatBigintDecimal } = require("./util/Formatter");
 const { fromBigInt, toBigInt } = require("./util/NumberUtil");
+const { writeOutput } = require("./util/Output");
 
 const getArbWallets = async () => {
   const {
@@ -533,33 +531,8 @@ const validateTotalUnripe = async (combinedUnripe) => {
 
   await assignBdvs(combinedUnripe);
 
-  // Final output
-  const outPath = path.join(process.cwd(), "output", "silo.json");
-  fs.writeFileSync(
-    outPath,
-    JSON.stringify(combinedUnripe, formatBigintDecimal, 2)
-  );
+  writeOutput("silo", combinedUnripe);
 })();
-
-// Separate by bean vs lp since we might want to show on the UI the breakdown of the calculation.
-const unripeRecapitalizedBdvs = {
-  "0xAccount": {
-    tokens: {
-      bean: "0x123",
-      lp: "0x12",
-    },
-    bdvAtSnapshot: {
-      bean: "0x123",
-      lp: "0x12",
-      total: "0xabcd",
-    },
-    bdvAtRecapitalization: {
-      bean: "0x123",
-      lp: "0x456",
-      total: "0x123456",
-    },
-  },
-};
 
 // Notes:
 // A couple things weren't done because the totals are matching the expected values already, therefore
