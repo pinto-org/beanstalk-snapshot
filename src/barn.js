@@ -9,6 +9,7 @@ const EVM = require("./data/EVM");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 const Concurrent = require("./util/Concurrent");
 const { unmigratedContracts } = require("./util/ContractHolders");
+const { formatBigintDecimal } = require("./util/Formatter");
 
 // Wallets that might have fert by id on arb
 const getArbWallets = async () => {
@@ -177,7 +178,81 @@ const validateTotalFert = async (combinedFert) => {
 
 // BPF adjustments
 const applyMetadata = async (combinedFert) => {
-  //
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  const beanBpf = BigInt(
+    await beanstalk.beansPerFertilizer({ blockTag: SNAPSHOT_BLOCK_ARB })
+  );
+
+  const retval = {
+    beanBpf,
+    adjustedBpf: 0n,
+    accounts: combinedFert,
+  };
+
+  for (const wallet in retval.accounts) {
+    for (const fertId in retval.accounts[wallet].beanFert) {
+      const adjustedId = BigInt(fertId) - beanBpf;
+      (retval.accounts[wallet].adjustedFert ??= {})[adjustedId] =
+        retval.accounts[wallet].beanFert[fertId];
+    }
+  }
+
+  return retval;
+};
+
+// Validate sprouts against both actual/adjusted values
+const validateTotalSprouts = async (finalResult) => {
+  const {
+    beanstalk: { contract: beanstalk },
+  } = await EVM.getArbitrum();
+
+  const unfertilizedBeans = BigInt(
+    await beanstalk.totalUnfertilizedBeans({ blockTag: SNAPSHOT_BLOCK_ARB })
+  );
+
+  let assignedUnfertilized = 0n;
+  let assignedUnfertilizedAdjusted = 0n;
+  for (const wallet in finalResult.accounts) {
+    for (const fertId in finalResult.accounts[wallet].beanFert) {
+      const remainingPerFert = BigInt(fertId) - finalResult.beanBpf;
+      assignedUnfertilized +=
+        BigInt(finalResult.accounts[wallet].beanFert[fertId]) *
+        remainingPerFert;
+    }
+    for (const fertId in finalResult.accounts[wallet].adjustedFert) {
+      const remainingPerFert = BigInt(fertId) - finalResult.adjustedBpf;
+      assignedUnfertilizedAdjusted +=
+        BigInt(finalResult.accounts[wallet].adjustedFert[fertId]) *
+        remainingPerFert;
+    }
+  }
+
+  if (assignedUnfertilized !== unfertilizedBeans) {
+    console.warn(
+      `! Found ${assignedUnfertilized} Unfertilized Beans, but there are actually ${unfertilizedBeans}`
+    );
+    console.warn(`! Deficit: ${unfertilizedBeans - assignedUnfertilized}`);
+  } else {
+    console.log(
+      `Unfertilized beans count matched the expected value of ${Number(unfertilizedBeans)}`
+    );
+  }
+
+  if (assignedUnfertilizedAdjusted !== unfertilizedBeans) {
+    console.warn(
+      `! Found ${assignedUnfertilizedAdjusted} Unfertilized Beans (adjusted), but there are actually ${unfertilizedBeans}`
+    );
+    console.warn(
+      `! Deficit: ${unfertilizedBeans - assignedUnfertilizedAdjusted}`
+    );
+  } else {
+    console.log(
+      `Adjusted unfertilized beans count matched the expected value of ${Number(unfertilizedBeans)}`
+    );
+  }
 };
 
 (async () => {
@@ -217,15 +292,15 @@ const applyMetadata = async (combinedFert) => {
   }
 
   await validateTotalFert(combinedFert);
-
   const finalResult = await applyMetadata(combinedFert);
+  await validateTotalSprouts(finalResult);
 
   // Final output
-  // const outPath = path.join(process.cwd(), "output", "silo.json");
-  // fs.writeFileSync(
-  //   outPath,
-  //   JSON.stringify(combinedUnripe, formatBigintDecimal, 2)
-  // );
+  const outPath = path.join(process.cwd(), "output", "barn.json");
+  fs.writeFileSync(
+    outPath,
+    JSON.stringify(finalResult, formatBigintDecimal, 2)
+  );
 })();
 
 // Number of sprouts/humidity etc is irrelevant since it can be derived from the bpf/id/amount.
