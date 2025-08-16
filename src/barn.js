@@ -1,4 +1,8 @@
-const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
+const {
+  getCachedOrCalculate,
+  getReseedResult,
+  getAndExtendIsContractMapping,
+} = require("./util/Cache");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const EVM = require("./data/EVM");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
@@ -6,6 +10,7 @@ const Concurrent = require("./util/Concurrent");
 const { unmigratedContracts } = require("./util/ContractHolders");
 const { writeOutput } = require("./util/Output");
 const { throwIfStringOverlap } = require("./util/Helper");
+const { Network } = require("alchemy-sdk");
 
 // Wallets that might have fert by id on arb
 const getArbWallets = async () => {
@@ -251,14 +256,34 @@ const validateTotalSprouts = async (finalResult) => {
   }
 };
 
-const resultByWalletType = async (finalResult) => {
+const resultByWalletType = async (combinedResult, arbWallets) => {
+  const arbIsContractMapping = await getAndExtendIsContractMapping(
+    Network.ARB_MAINNET,
+    arbWallets,
+    SNAPSHOT_BLOCK_ARB
+  );
+
   const retval = {
-    beanBpf: finalResult.beanBpf,
-    adjustedBpf: finalResult.adjustedBpf,
+    beanBpf: combinedResult.beanBpf,
+    adjustedBpf: combinedResult.adjustedBpf,
     arbEOAs: {},
     arbContracts: {},
     ethContracts: {},
   };
+
+  for (const wallet in combinedResult.accounts) {
+    if (arbWallets.has(wallet)) {
+      if (arbIsContractMapping[wallet]) {
+        retval.arbContracts[wallet] = combinedResult.accounts[wallet];
+      } else {
+        retval.arbEOAs[wallet] = combinedResult.accounts[wallet];
+      }
+    } else {
+      retval.ethContracts[wallet] = combinedResult.accounts[wallet];
+    }
+  }
+
+  return retval;
 };
 
 (async () => {
@@ -290,8 +315,13 @@ const resultByWalletType = async (finalResult) => {
   const combinedFert = { ...arbFert, ...ethFert };
 
   await validateTotalFert(combinedFert);
-  const finalResult = await applyMetadata(combinedFert);
-  await validateTotalSprouts(finalResult);
+  const combinedResult = await applyMetadata(combinedFert);
+  await validateTotalSprouts(combinedResult);
+
+  const finalResult = await resultByWalletType(
+    combinedResult,
+    new Set(Object.keys(arbFert))
+  );
 
   writeOutput("barn", finalResult);
 })();

@@ -1,7 +1,7 @@
 {
   "beanBpf": "340802",
   "adjustedBpf": "0",
-  "accounts": {
+  "arbEOAs": {
     "0xBd120e919eb05343DbA68863f2f8468bd7010163": {
       "beanFert": {
         "1334303": "161",
@@ -36,14 +36,6 @@
       "adjustedFert": {
         "1007567": "1",
         "2361628": "1"
-      }
-    },
-    "0xeCdc4DD795D79F668Ff09961b2A2f47FE8e4f170": {
-      "beanFert": {
-        "6000000": "20"
-      },
-      "adjustedFert": {
-        "5659198": "20"
       }
     },
     "0x3c5Aac016EF2F178e8699D6208796A2D67557fe2": {
@@ -442,14 +434,6 @@
       },
       "adjustedFert": {
         "2719606": "564"
-      }
-    },
-    "0xd39A31e5f23D90371D61A976cACb728842e04ca9": {
-      "beanFert": {
-        "6000000": "2000"
-      },
-      "adjustedFert": {
-        "5659198": "2000"
       }
     },
     "0x4C7b7Ba495F6Da17e3F07Ab134A9C2c79DF87507": {
@@ -6621,7 +6605,27 @@
       "adjustedFert": {
         "5659198": "1"
       }
+    }
+  },
+  "arbContracts": {
+    "0xeCdc4DD795D79F668Ff09961b2A2f47FE8e4f170": {
+      "beanFert": {
+        "6000000": "20"
+      },
+      "adjustedFert": {
+        "5659198": "20"
+      }
     },
+    "0xd39A31e5f23D90371D61A976cACb728842e04ca9": {
+      "beanFert": {
+        "6000000": "2000"
+      },
+      "adjustedFert": {
+        "5659198": "2000"
+      }
+    }
+  },
+  "ethContracts": {
     "0x735CAB9B02Fd153174763958FFb4E0a971DD7f29": {
       "beanFert": {
         "3458512": "542767",

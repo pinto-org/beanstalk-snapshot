@@ -87,5 +87,15 @@ class EVM {
       },
     };
   }
+
+  // An address is considered to be a contract if it has associated code
+  static async isContract(network, address, block) {
+    const provider = await this.getProvider(network);
+    try {
+      return (await provider.getCode(address, block)) !== "0x";
+    } catch (e) {
+      return false;
+    }
+  }
 }
 module.exports = EVM;
