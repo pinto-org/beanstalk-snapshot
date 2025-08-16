@@ -1,6 +1,11 @@
+const { Network } = require("alchemy-sdk");
 const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
-const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
+const {
+  getCachedOrCalculate,
+  getReseedResult,
+  getAndExtendIsContractMapping,
+} = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
 const {
   SNAPSHOT_BLOCK_ARB,
@@ -210,6 +215,34 @@ const validateTotalPods = async (totalPodCount) => {
   }
 };
 
+const resultByWalletType = async (combinedResult, arbWallets) => {
+  const arbIsContractMapping = await getAndExtendIsContractMapping(
+    Network.ARB_MAINNET,
+    arbWallets,
+    SNAPSHOT_BLOCK_ARB
+  );
+
+  const retval = {
+    arbEOAs: {},
+    arbContracts: {},
+    ethContracts: {},
+  };
+
+  for (const wallet in combinedResult) {
+    if (arbWallets.has(wallet)) {
+      if (arbIsContractMapping[wallet]) {
+        retval.arbContracts[wallet] = combinedResult[wallet];
+      } else {
+        retval.arbEOAs[wallet] = combinedResult[wallet];
+      }
+    } else {
+      retval.ethContracts[wallet] = combinedResult[wallet];
+    }
+  }
+
+  return retval;
+};
+
 (async () => {
   /// ---------- Arb ----------
   const arbWallets = await getCachedOrCalculate(
@@ -287,5 +320,10 @@ const validateTotalPods = async (totalPodCount) => {
 
   await validateTotalPods(totalCombinedPods);
 
-  writeOutput("field", combinedPods);
+  const finalResult = await resultByWalletType(
+    combinedPods,
+    new Set(Object.keys(arbPods))
+  );
+
+  writeOutput("field", finalResult);
 })();
