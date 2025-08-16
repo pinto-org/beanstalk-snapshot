@@ -18,12 +18,10 @@ const getCachedOrCalculate = async (name, calculateFn) => {
   } else {
     console.log(`No cached result found for ${name}. Calculating...`);
     const result = await calculateFn();
-    fs.writeFileSync(
-      cacheFile,
-      JSON.stringify(result, formatBigintDecimal, 2),
-      "utf8"
-    );
-    return result;
+    const stringified = JSON.stringify(result, formatBigintDecimal, 2);
+    fs.writeFileSync(cacheFile, stringified, "utf8");
+    // Re-parse for type consistency in both hit/miss scenarios
+    return JSON.parse(stringified);
   }
 };
 

@@ -4,7 +4,11 @@ const EVM = require("./data/EVM");
 const { batchEventsQuery } = require("./util/BatchEvents");
 const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
-const { SNAPSHOT_BLOCK_ARB, RESEED_BLOCK_ETH } = require("./util/Constants");
+const {
+  SNAPSHOT_BLOCK_ARB,
+  RESEED_BLOCK_ETH,
+  ADDR,
+} = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
 const { formatBigintDecimal } = require("./util/Formatter");
 
@@ -54,15 +58,16 @@ const getArbWallets = async () => {
   ]);
   const sowAccts = sows.map((sow) => sow.args.account);
 
-  return [
-    ...new Set([
-      ...autoMigratedAccts,
-      ...transferAccts,
-      ...sowAccts,
-      // Arb wallet is the receiver of the L1 migrated plots
-      ...migratedFromContracts.map((l1Plots) => l1Plots.arbReceiver),
-    ]),
-  ];
+  const retval = new Set([
+    ...autoMigratedAccts,
+    ...transferAccts,
+    ...sowAccts,
+    // Arb wallet is the receiver of the L1 migrated plots
+    ...migratedFromContracts.map((l1Plots) => l1Plots.arbReceiver),
+  ]);
+  retval.delete(ADDR.NULL);
+
+  return [...retval];
 };
 
 // Contracts which did not have their Field assets migrated to arb, who therefore might have pods

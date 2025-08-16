@@ -77,21 +77,22 @@ const getArbWallets = async () => {
       );
       console.log(`Found ${transferBatch.length} TransferBatch events.`);
 
-      return [
-        ...new Set([
-          ...addMigratedDeposit.map((e) => e.args.account),
-          ...addDeposit.map((e) => e.args.account),
-          ...removeDeposit.map((e) => e.args.account),
-          ...removeDeposits.map((e) => e.args.account),
-          ...transferSingle.flatMap((e) => [
-            e.args.sender ?? e.args.from ?? e.args._from,
-            e.args.recipient ?? e.args.to ?? e.args._to,
-          ]),
-          ...transferBatch.flatMap((e) => [e.args.from, e.args.to]),
-          // Arb wallet is the receiver of the L1 migrated deposits
-          ...contractsMigratedDeposits.map((deposit) => deposit.arbReceiver),
+      const depositWallets = new Set([
+        ...addMigratedDeposit.map((e) => e.args.account),
+        ...addDeposit.map((e) => e.args.account),
+        ...removeDeposit.map((e) => e.args.account),
+        ...removeDeposits.map((e) => e.args.account),
+        ...transferSingle.flatMap((e) => [
+          e.args.sender ?? e.args.from ?? e.args._from,
+          e.args.recipient ?? e.args.to ?? e.args._to,
         ]),
-      ];
+        ...transferBatch.flatMap((e) => [e.args.from, e.args.to]),
+        // Arb wallet is the receiver of the L1 migrated deposits
+        ...contractsMigratedDeposits.map((deposit) => deposit.arbReceiver),
+      ]);
+      depositWallets.delete(ADDR.NULL);
+
+      return [...depositWallets];
     }
   );
 
@@ -118,6 +119,7 @@ const getArbWallets = async () => {
         ...urbeanTransfer.flatMap((e) => [e.args.from, e.args.to]),
         ...urlpTransfer.flatMap((e) => [e.args.from, e.args.to]),
       ]);
+      circulatingWallets.delete(ADDR.NULL);
       // Dont count the diamond's circulating assets.
       circulatingWallets.delete(ADDR.ARB.BEANSTALK);
 
