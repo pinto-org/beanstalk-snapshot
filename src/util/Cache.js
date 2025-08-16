@@ -6,7 +6,7 @@ const Concurrent = require("./Concurrent");
 const EVM = require("../data/EVM");
 
 const getCachedOrCalculate = async (name, calculateFn) => {
-  const cacheDir = path.join(process.cwd(), "cache");
+  const cacheDir = path.join(__dirname, "../../", "cache");
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
@@ -30,7 +30,7 @@ const getCachedOrCalculate = async (name, calculateFn) => {
 // Builds a mapping of addresses to whether they are contracts at a given block.
 // Allows reuse of same info across various scripts.
 const getAndExtendIsContractMapping = async (network, addresses, block) => {
-  const cacheDir = path.join(process.cwd(), "cache");
+  const cacheDir = path.join(__dirname, "../../", "cache");
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
@@ -67,7 +67,7 @@ const getAndExtendIsContractMapping = async (network, addresses, block) => {
 
 const getReseedResult = (name, type) => {
   const data = fs.readFileSync(
-    path.join(process.cwd(), "reseed", `${name}${RESEED_BLOCK_ETH}.json`),
+    path.join(__dirname, "../../", "reseed", `${name}${RESEED_BLOCK_ETH}.json`),
     "utf8"
   );
 
