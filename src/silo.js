@@ -4,6 +4,7 @@ const { getCachedOrCalculate, getReseedResult } = require("./util/Cache");
 const Concurrent = require("./util/Concurrent");
 const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
+const { throwIfStringOverlap } = require("./util/Helper");
 const { fromBigInt, toBigInt } = require("./util/NumberUtil");
 const { writeOutput } = require("./util/Output");
 
@@ -513,22 +514,9 @@ const validateTotalUnripe = async (combinedUnripe) => {
   );
 
   /// ---------- Combined ----------
-  const combinedUnripe = arbUnripe;
-  for (const wallet in ethUnripe) {
-    combinedUnripe[wallet] = {
-      tokens: {
-        bean:
-          (combinedUnripe[wallet]?.tokens.bean ?? 0n) +
-          ethUnripe[wallet].tokens.bean,
-        lp:
-          (combinedUnripe[wallet]?.tokens.lp ?? 0n) +
-          ethUnripe[wallet].tokens.lp,
-      },
-    };
-  }
-
+  throwIfStringOverlap(Object.keys(arbUnripe), Object.keys(ethUnripe));
+  const combinedUnripe = { ...arbUnripe, ...ethUnripe };
   await validateTotalUnripe(combinedUnripe);
-
   await assignBdvs(combinedUnripe);
 
   writeOutput("silo", combinedUnripe);

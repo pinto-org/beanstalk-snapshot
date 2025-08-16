@@ -8,6 +8,7 @@ const {
   ADDR,
 } = require("./util/Constants");
 const { unmigratedContracts } = require("./util/ContractHolders");
+const { throwIfStringOverlap } = require("./util/Helper");
 const { writeOutput } = require("./util/Output");
 
 // Wallets with Field assets on arb
@@ -267,7 +268,7 @@ const validateTotalPods = async (totalPodCount) => {
   );
 
   /// ---------- Combined ----------
-  // In practice combining like this is ok because there is no overlap between the wallets in each
+  throwIfStringOverlap(Object.keys(arbPods), Object.keys(ethPods));
   const combinedPods = {
     ...arbPods,
     ...ethPods,

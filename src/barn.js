@@ -5,6 +5,7 @@ const { ADDR, SNAPSHOT_BLOCK_ARB } = require("./util/Constants");
 const Concurrent = require("./util/Concurrent");
 const { unmigratedContracts } = require("./util/ContractHolders");
 const { writeOutput } = require("./util/Output");
+const { throwIfStringOverlap } = require("./util/Helper");
 
 // Wallets that might have fert by id on arb
 const getArbWallets = async () => {
@@ -250,6 +251,16 @@ const validateTotalSprouts = async (finalResult) => {
   }
 };
 
+const resultByWalletType = async (finalResult) => {
+  const retval = {
+    beanBpf: finalResult.beanBpf,
+    adjustedBpf: finalResult.adjustedBpf,
+    arbEOAs: {},
+    arbContracts: {},
+    ethContracts: {},
+  };
+};
+
 (async () => {
   /// ---------- Arb ----------
   const arbWallets = await getCachedOrCalculate(
@@ -275,16 +286,8 @@ const validateTotalSprouts = async (finalResult) => {
   );
 
   /// ---------- Combined ----------
-
-  const combinedFert = arbFert;
-  for (const wallet in ethFert) {
-    combinedFert[wallet] ??= { beanFert: {} };
-    for (const fertId in ethFert[wallet].beanFert) {
-      combinedFert[wallet].beanFert[fertId] =
-        (combinedFert[wallet].beanFert[fertId] ?? 0n) +
-        BigInt(ethFert[wallet].beanFert[fertId]);
-    }
-  }
+  throwIfStringOverlap(Object.keys(arbFert), Object.keys(ethFert));
+  const combinedFert = { ...arbFert, ...ethFert };
 
   await validateTotalFert(combinedFert);
   const finalResult = await applyMetadata(combinedFert);
