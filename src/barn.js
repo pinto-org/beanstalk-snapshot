@@ -294,6 +294,108 @@ const validateTotalSprouts = async (finalResult) => {
   }
 };
 
+// Directly carry over storage values from arbitrum beanstalk
+const attachStorageValues = async (finalResult) => {
+  const barnStorage = await getCachedOrCalculate("barn-storage", async () => {
+    const {
+      beanstalk: { storage: bs },
+    } = await EVM.getArbitrum();
+
+    const [
+      activeFertilizer,
+      fertilizedIndex,
+      unfertilizedIndex,
+      fertilizedPaidIndex,
+      fertFirst,
+      fertLast,
+      bpf,
+      recapitalized,
+      leftoverBeans,
+    ] = await Promise.all([
+      bs.s.sys.fert.activeFertilizer,
+      bs.s.sys.fert.fertilizedIndex,
+      bs.s.sys.fert.unfertilizedIndex,
+      bs.s.sys.fert.fertilizedPaidIndex,
+      bs.s.sys.fert.fertFirst,
+      bs.s.sys.fert.fertLast,
+      bs.s.sys.fert.bpf,
+      bs.s.sys.fert.recapitalized,
+      bs.s.sys.fert.leftoverBeans,
+    ]);
+
+    let storage = {
+      fertilizer: {},
+      nextFid: {},
+      activeFertilizer,
+      fertilizedIndex,
+      unfertilizedIndex,
+      fertilizedPaidIndex,
+      fertFirst,
+      fertLast,
+      bpf,
+      recapitalized,
+      leftoverBeans,
+    };
+    let currFid = fertFirst;
+    while (!!currFid) {
+      const [total, next] = await Promise.all([
+        bs.s.sys.fert.fertilizer[currFid],
+        bs.s.sys.fert.nextFid[currFid],
+      ]);
+      storage.fertilizer[currFid] = total;
+      storage.nextFid[currFid] = next;
+      currFid = next;
+    }
+    return storage;
+  });
+
+  finalResult.storage = barnStorage;
+};
+
+const crossValidateStorage = async (finalResult) => {
+  const fertGrouped = {};
+  const sumSection = (section) => {
+    for (const wallet in section) {
+      for (const fertId in section[wallet].beanFert) {
+        fertGrouped[fertId] =
+          (fertGrouped[fertId] ?? 0n) +
+          BigInt(section[wallet].beanFert[fertId]);
+      }
+    }
+  };
+  sumSection(finalResult.arbEOAs);
+  sumSection(finalResult.arbContracts);
+  sumSection(finalResult.ethContracts);
+
+  // Verify the same fertilizer ids are present in both locations
+  const allFids = new Set(Object.keys(fertGrouped));
+  const allStorageFids = new Set(Object.keys(finalResult.storage.fertilizer));
+  if (allFids.size !== allStorageFids.size) {
+    console.warn(
+      `! Some fertilizer ids were missing. Storage has ${allStorageFids.size} but we found ${allFids.size}`
+    );
+  }
+  for (const fid of allFids) {
+    if (!allStorageFids.has(fid)) {
+      console.warn(`! Fert ${fid} was not found in storage`);
+    }
+  }
+  for (const fid of allStorageFids) {
+    if (!allFids.has(fid)) {
+      console.warn(`! Fert ${fid} was not found`);
+    }
+  }
+
+  // Verify correct counts of fertilizer
+  for (const fid in finalResult.storage.fertilizer) {
+    if (fertGrouped[fid] !== BigInt(finalResult.storage.fertilizer[fid])) {
+      console.warn(
+        `! Fert ${fid} found ${fertGrouped[fid]} but has ${finalResult.storage.fertilizer[fid]} in storage`
+      );
+    }
+  }
+};
+
 (async () => {
   /// ---------- Arb ----------
   const arbWallets = await getCachedOrCalculate(
@@ -330,6 +432,9 @@ const validateTotalSprouts = async (finalResult) => {
 
   await validateTotalFert(finalResult);
   await validateTotalSprouts(finalResult);
+
+  await attachStorageValues(finalResult);
+  await crossValidateStorage(finalResult);
 
   writeOutput("barn", finalResult);
 })();
