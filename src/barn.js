@@ -421,7 +421,10 @@ const crossValidateStorage = async (finalResult) => {
   );
 
   /// ---------- Combined ----------
-  throwIfStringOverlap(Object.keys(arbFert), Object.keys(ethFert));
+  throwIfStringOverlap(
+    Object.keys(arbFert).map((k) => k.toLowerCase()),
+    Object.keys(ethFert).map((k) => k.toLowerCase())
+  );
   const combinedFert = { ...arbFert, ...ethFert };
   const combinedResult = await applyMetadata(combinedFert);
 

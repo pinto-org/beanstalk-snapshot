@@ -304,11 +304,11 @@ const getEthUnripe = async () => {
     results[wallet] = {
       tokens: {
         bean:
-          (results[wallet]?.tokens.bean ?? 0n) +
-          internalBalances[wallet].tokens.bean,
+          BigInt(results[wallet]?.tokens.bean ?? 0) +
+          BigInt(internalBalances[wallet].tokens.bean),
         lp:
-          (results[wallet]?.tokens.lp ?? 0n) +
-          internalBalances[wallet].tokens.lp,
+          BigInt(results[wallet]?.tokens.lp ?? 0) +
+          BigInt(internalBalances[wallet].tokens.lp),
       },
     };
   }
@@ -335,13 +335,15 @@ const getEthUnripeDeposits = async () => {
 
   const results = {};
 
-  const walletsLower = unmigratedOwners.map((wallet) => wallet.toLowerCase());
-  for (const wallet of walletsLower) {
-    for (const token in reseedDeposits.accounts[wallet]?.totals ?? {}) {
+  for (const wallet of unmigratedOwners) {
+    const walletLower = wallet.toLowerCase();
+    for (const token in reseedDeposits.accounts[walletLower]?.totals ?? {}) {
       if (token === ADDR.ETH.UNRIPE_BEAN.toLowerCase()) {
         results[wallet] = {
           tokens: {
-            bean: BigInt(reseedDeposits.accounts[wallet].totals[token].amount),
+            bean: BigInt(
+              reseedDeposits.accounts[walletLower].totals[token].amount
+            ),
             lp: results[wallet]?.tokens.lp ?? 0n,
           },
         };
@@ -349,7 +351,9 @@ const getEthUnripeDeposits = async () => {
         results[wallet] = {
           tokens: {
             bean: results[wallet]?.tokens.bean ?? 0n,
-            lp: BigInt(reseedDeposits.accounts[wallet].totals[token].amount),
+            lp: BigInt(
+              reseedDeposits.accounts[walletLower].totals[token].amount
+            ),
           },
         };
       }
@@ -552,7 +556,10 @@ const validateTotalUnripe = async (finalResult) => {
   );
 
   /// ---------- Combined ----------
-  throwIfStringOverlap(Object.keys(arbUnripe), Object.keys(ethUnripe));
+  throwIfStringOverlap(
+    Object.keys(arbUnripe).map((k) => k.toLowerCase()),
+    Object.keys(ethUnripe).map((k) => k.toLowerCase())
+  );
   const combinedUnripe = { ...arbUnripe, ...ethUnripe };
   await assignBdvs(combinedUnripe);
 

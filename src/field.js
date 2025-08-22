@@ -313,7 +313,10 @@ const validateTotalPods = async (finalResult) => {
   );
 
   /// ---------- Combined ----------
-  throwIfStringOverlap(Object.keys(arbPods), Object.keys(ethPods));
+  throwIfStringOverlap(
+    Object.keys(arbPods).map((k) => k.toLowerCase()),
+    Object.keys(ethPods).map((k) => k.toLowerCase())
+  );
   const combinedPods = {
     ...arbPods,
     ...ethPods,
